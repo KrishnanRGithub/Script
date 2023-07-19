@@ -1,0 +1,77 @@
+# Load necessary assemblies
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+
+public class Keyboard {
+    [DllImport("user32.dll")]
+    public static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll", CharSet=CharSet.Auto, ExactSpelling=true)]
+    public static extern IntPtr GetForegroundWindow();
+}
+"@ 
+
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+
+public class Screenshot {
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool GetWindowRect(IntPtr hwnd, out RECT lpRect);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RECT {
+        public int Left;        
+        public int Top;         
+        public int Right;       
+        public int Bottom;      
+    }
+}
+"@
+
+# Define function to send keystrokes
+function Send-Keystrokes {
+    param([string]$keys)
+
+    # Bring the PowerShell window to the front
+    $null = [Keyboard]::SetForegroundWindow([Keyboard]::GetForegroundWindow())
+
+    # Create a new object to send keystrokes
+    $sendKeys = [System.Windows.Forms.SendKeys]::SendWait($keys)
+}
+
+# Define function to take a screenshot
+function Take-Screenshot {
+    param([string]$filename)
+
+    $window = [Screenshot]::GetForegroundWindow()
+    $rect = New-Object Screenshot+RECT
+
+    # Get the dimensions of the active window
+    $null = [Screenshot]::GetWindowRect($window, [ref]$rect)
+
+    # Capture the screenshot
+    $bmp = New-Object System.Drawing.Bitmap $rect.Right, $rect.Bottom
+    $graphics = [System.Drawing.Graphics]::FromImage($bmp)
+    $graphics.CopyFromScreen($rect.Left, $rect.Top, 0, 0, $bmp.Size)
+
+    # Save the screenshot
+    $bmp.Save("$filename.png")
+}
+
+# Array of filenames
+$filenames = @("file1", "file2", "file3")  # replace with your filenames
+
+# Cycle through windows and take screenshots
+foreach ($filename in $filenames) {
+    # Use Alt+Tab to switch to the next window
+    Send-Keystrokes "%{TAB}"
+    Start-Sleep -Seconds 1  # wait for 1 second for the window to come to the front
+
+    # Take a screenshot and save it with the current filename
+    Take-Screenshot -filename $filename
+}
